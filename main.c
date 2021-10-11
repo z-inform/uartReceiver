@@ -40,37 +40,39 @@ int main(int argc, char* argv[]){
         printf("\n");
         */
 
-        if( circmp(prefix, &uart_read) == 0 ){ //none of the while(...) further will work when buffer loops. To be fixed
+        if( circmp(prefix, &uart_read) == 0 ){
 
             uart_read.cur_read = (uart_read.cur_read + 2) % CIRC_BUF_SIZE;//skip parcel prefix
 
-            while( uart_read.cur_elem - uart_read.cur_read < 3 ){ //wait for data size and type in buffer
+            while( circ_unread(&uart_read) < 3 ){ //wait for data size and type in buffer
                 read(fd, &rdata, 1);
                 circ_write(rdata, &uart_read);
             }
             
 
-            uint16_t data_size = * (uint16_t*) (uart_read.buf + uart_read.cur_read);
+            uint16_t data_size;
+            char data_type;
+            circ_read(&data_size, 2, &uart_read);
             uart_read.cur_read = (uart_read.cur_read + 2) % CIRC_BUF_SIZE;
-            char data_type = uart_read.buf[uart_read.cur_read];
-            char* data = (char*) malloc(data_size);
+            circ_read(&data_type, 1, &uart_read);
             uart_read.cur_read = (uart_read.cur_read + 1) % CIRC_BUF_SIZE;
+            char* data = malloc(data_size);
 
-            while( uart_read.cur_elem - uart_read.cur_read < data_size ){ //wait for all data in buffer
+            while( circ_unread(&uart_read) < data_size ){ //wait for all data in buffer
                 read(fd, &rdata, 1);
                 circ_write(rdata, &uart_read);
             }
 
-            memcpy(data, uart_read.buf + uart_read.cur_read, data_size);
+            circ_read(data, data_size, &uart_read);
             uart_read.cur_read = (uart_read.cur_read + data_size) % CIRC_BUF_SIZE;
 
-            while( uart_read.cur_elem - uart_read.cur_read < 4 ){ //wait for crc in buffer
+            while( circ_unread(&uart_read) < 4 ){ //wait for crc in buffer
                 read(fd, &rdata, 1);
                 circ_write(rdata, &uart_read);
             }
 
             uint32_t crc32; 
-            memcpy(&crc32, uart_read.buf + uart_read.cur_read, 4);
+            circ_read(&crc32, 4, &uart_read);
 
 
             char crc_flag;
@@ -93,7 +95,7 @@ int main(int argc, char* argv[]){
             }
 
             printf("\n");
-
+            free(data);
         }
 
     }

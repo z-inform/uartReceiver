@@ -1,5 +1,6 @@
 #include "circ_buffer.h"
 #include "string.h"
+#include <stdint.h>
 
 circ_buffer uart_read = {.buf = {0}, .cur_elem = 0, .cur_read = 0};
 
@@ -10,7 +11,7 @@ int circ_write(char val, circ_buffer* buffer){
 }
 
 int circmp(char *str, circ_buffer* buffer){
-    unsigned char offset = 0;
+    unsigned int offset = 0;
     char* status;
     char unwound_buf[CIRC_BUF_SIZE + 1];
     unwound_buf[CIRC_BUF_SIZE] = 0;
@@ -45,10 +46,32 @@ int circmp(char *str, circ_buffer* buffer){
         return 1;
     else{
         //corrupt the string in buffer to avoid finding at again
-        offset = (offset + (unsigned char) status - (unsigned char) unwound_buf) % CIRC_BUF_SIZE;
+        offset = (offset + (unsigned int) status - (unsigned int) unwound_buf) % CIRC_BUF_SIZE;
         buffer->buf[offset] = '\n';
         buffer->cur_read = offset;
         return 0;
     }
 
 }
+
+int circ_unread(circ_buffer* buffer){
+    int delta;
+    if (buffer->cur_read > buffer->cur_elem)
+        delta = CIRC_BUF_SIZE - buffer->cur_read + buffer->cur_elem;
+    else    
+        delta = buffer->cur_elem - buffer->cur_read;
+
+    return delta;
+}
+
+int circ_read(void* dest, uint32_t size, circ_buffer* buffer){
+    if (buffer->cur_read + size > CIRC_BUF_SIZE) {
+        int delta = CIRC_BUF_SIZE - buffer->cur_read;
+        memcpy(dest, buffer->buf + buffer->cur_read, delta);
+        memcpy((char*) dest + delta, buffer->buf, size - delta);
+    } else
+        memcpy(dest, buffer->buf + buffer->cur_read, size);
+    
+    return 0;
+}
+
