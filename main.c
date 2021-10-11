@@ -9,10 +9,9 @@
 
 #include "fddata.h"
 #include "circ_buffer.h"
+#include "CRC32.h"
 
 extern circ_buffer uart_read;
-
-uint32_t crc_calc(char* src, uint16_t size);
 
 int main(int argc, char* argv[]){
 
@@ -33,6 +32,14 @@ int main(int argc, char* argv[]){
         read(fd, &rdata, 1);
         circ_write(rdata, &uart_read);
 
+
+        /*
+        for(int i = 0; i < uart_read.cur_elem; i++){
+            printf("%x", uart_read.buf[i]);
+        }
+        printf("\n");
+        */
+
         if( circmp(prefix, &uart_read) == 0 ){ //none of the while(...) further will work when buffer loops. To be fixed
 
             uart_read.cur_read = (uart_read.cur_read + 2) % CIRC_BUF_SIZE;//skip parcel prefix
@@ -41,11 +48,13 @@ int main(int argc, char* argv[]){
                 read(fd, &rdata, 1);
                 circ_write(rdata, &uart_read);
             }
+            
 
             uint16_t data_size = * (uint16_t*) (uart_read.buf + uart_read.cur_read);
             uart_read.cur_read = (uart_read.cur_read + 2) % CIRC_BUF_SIZE;
             char data_type = uart_read.buf[uart_read.cur_read];
             char* data = (char*) malloc(data_size);
+            uart_read.cur_read = (uart_read.cur_read + 1) % CIRC_BUF_SIZE;
 
             while( uart_read.cur_elem - uart_read.cur_read < data_size ){ //wait for all data in buffer
                 read(fd, &rdata, 1);
@@ -55,46 +64,38 @@ int main(int argc, char* argv[]){
             memcpy(data, uart_read.buf + uart_read.cur_read, data_size);
             uart_read.cur_read = (uart_read.cur_read + data_size) % CIRC_BUF_SIZE;
 
-            uint32_t crc32 = * (uint32_t*) (uart_read.buf + uart_read.cur_read);
+            while( uart_read.cur_elem - uart_read.cur_read < 4 ){ //wait for crc in buffer
+                read(fd, &rdata, 1);
+                circ_write(rdata, &uart_read);
+            }
 
-            if( crc32 != crc_calc(uart_read.buf, data_size) )
-                crc32 = 1;
+            uint32_t crc32; 
+            memcpy(&crc32, uart_read.buf + uart_read.cur_read, 4);
+
+
+            char crc_flag;
+            uint32_t crc32_data = 0;
+            crc32_data = doCRC32(data, data_size);
+            if( crc32 != crc32_data )
+                crc_flag = 1;
             else
-                crc32 = 0;
+                crc_flag = 0;
 
-            printf("RX(found prefix):\t");
+            printf("RX(found prefix): ");
             printf(" size: %d, type %d\n", data_size, data_type);
-            if( crc32 ){
+            printf("Data: %s\n", data);
+            if( crc_flag ){
                 printf("\e[31mCRC ERROR\e[0m\n");
+                printf("Received %x; Expected %x\n", crc32, crc32_data);
             }
             else{
-                printf("\e[30mCRC OK\e[0m\n");
-                printf("%s\n", data);
+                printf("\e[32mCRC OK\e[0m\n");
             }
 
+            printf("\n");
 
         }
 
     }
     return 0;
 }
-
-
-uint32_t crc_calc(char* src, uint16_t size){
-
-    const unsigned char *buffer = (const unsigned char*) src;
-    uint32_t crc = -1;
-
-    while( size-- )
-    {
-        crc = crc ^ *buffer++;
-        for( int bit = 0; bit < 8; bit++ )
-        {
-            if( crc & 1 ) crc = (crc >> 1) ^ 0x4C11DB7;
-            else          crc = (crc >> 1);
-        }
-    }
-
-    return ~crc;
-}
-

@@ -1,7 +1,7 @@
 BUILDDIR = output
 CFLAGS = -Wall -Wpedantic
 
-ULIBTARGETS = circ_buffer.o
+ULIBTARGETS = circ_buffer.o CRC32.o
 FINALOBJ := main.o $(ULIBTARGETS)
 FINALOBJ := $(addprefix $(BUILDDIR)/, $(FINALOBJ))
 
